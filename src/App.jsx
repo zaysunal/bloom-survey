@@ -7,6 +7,7 @@ const PAL = {
   stem:"#5A7247", leaf:"#6B8C56", leafLight:"#8DAF78",
   wrap:"#C9B99A", wrapDark:"#B5A488",
   white:"#FFFFFF", danger:"#C0564E",
+  grey:"#C2BBB3", greyLight:"#D5D0C9",
 };
 
 const FLOWERS = [
@@ -17,16 +18,16 @@ const FLOWERS = [
 ];
 
 const GUESS_RIGHT = [
-  "You speak fluent flower.",
-  "The petals bow to your intuition.",
-  "A natural-born botanist over here.",
-  "Did someone whisper the answer to you?",
+  "You nailed the color.",
+  "That color intuition is on point.",
+  "Exactly right. Are you reading the bouquet's mind?",
+  "Color match. You might be part flower.",
 ];
 const GUESS_WRONG = [
-  "The garden had its own plans.",
-  "Surprise is the best fertilizer.",
+  "Not that color, but the garden had its own plans.",
+  "Different color than you expected. Surprise is the best fertilizer.",
   "Wrong color, right spirit. We love it.",
-  "Nature keeps you on your toes.",
+  "The bouquet chose a different shade. Nature keeps you guessing.",
 ];
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
@@ -105,11 +106,16 @@ function BouquetSVG({ answered, blooming, colorOrder=[0,1,2] }) {
   const fd = [{cx:82,cy:115},{cx:150,cy:85},{cx:218,cy:115}];
   const cf = i => FLOWERS[colorOrder[i]];
   const fs = i => ({
-    filter: answered[i]?(blooming===i?"url(#glow)":"none"):"grayscale(1)",
-    opacity: answered[i]?1:0.28,
     transition:"filter 1.2s ease, opacity 1.2s ease",
     transformOrigin:`${fd[i].cx}px ${fd[i].cy}px`,
-    animation: blooming===i?"bloomPulse 0.9s ease-out":"none",
+    ...(answered[i] ? {
+      filter: blooming===i ? "url(#glow)" : "none",
+      opacity: 1,
+      animation: blooming===i ? "bloomPulse 0.9s ease-out" : "none",
+    } : {
+      filter: "grayscale(1) brightness(1.3)",
+      opacity: 0.5,
+    }),
   });
   return (
     <svg viewBox="0 0 300 370" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",maxWidth:260,height:"auto"}}>
@@ -117,12 +123,12 @@ function BouquetSVG({ answered, blooming, colorOrder=[0,1,2] }) {
         <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
         <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={PAL.stem}/><stop offset="100%" stopColor="#4A6238"/></linearGradient>
       </defs>
-      <path d="M82,150 Q95,200 108,285" stroke="url(#sg)" strokeWidth="4" fill="none" strokeLinecap="round"/>
-      <path d="M150,120 Q150,180 150,285" stroke="url(#sg)" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
-      <path d="M218,150 Q205,200 192,285" stroke="url(#sg)" strokeWidth="4" fill="none" strokeLinecap="round"/>
-      <path d="M95,195 Q75,180 85,165 Q100,175 95,195Z" fill={answered[0]?PAL.leaf:"#D5D0C9"} style={{transition:"fill 1.2s"}}/>
-      <path d="M155,170 Q175,153 168,140 Q150,152 155,170Z" fill={answered[1]?PAL.leaf:"#D5D0C9"} style={{transition:"fill 1.2s"}}/>
-      <path d="M205,190 Q225,175 218,162 Q200,172 205,190Z" fill={answered[2]?PAL.leaf:"#D5D0C9"} style={{transition:"fill 1.2s"}}/>
+      <path d="M82,150 Q95,200 108,285" stroke={answered[0]?"url(#sg)":PAL.greyLight} strokeWidth="4" fill="none" strokeLinecap="round" style={{transition:"stroke 1.2s"}}/>
+      <path d="M150,120 Q150,180 150,285" stroke={answered[1]?"url(#sg)":PAL.greyLight} strokeWidth="4.5" fill="none" strokeLinecap="round" style={{transition:"stroke 1.2s"}}/>
+      <path d="M218,150 Q205,200 192,285" stroke={answered[2]?"url(#sg)":PAL.greyLight} strokeWidth="4" fill="none" strokeLinecap="round" style={{transition:"stroke 1.2s"}}/>
+      <path d="M95,195 Q75,180 85,165 Q100,175 95,195Z" fill={answered[0]?PAL.leaf:PAL.greyLight} style={{transition:"fill 1.2s"}}/>
+      <path d="M155,170 Q175,153 168,140 Q150,152 155,170Z" fill={answered[1]?PAL.leaf:PAL.greyLight} style={{transition:"fill 1.2s"}}/>
+      <path d="M205,190 Q225,175 218,162 Q200,172 205,190Z" fill={answered[2]?PAL.leaf:PAL.greyLight} style={{transition:"fill 1.2s"}}/>
       <path d="M100,270 Q110,260 150,257 Q190,260 200,270 L195,295 Q190,305 150,307 Q110,305 105,295Z" fill={PAL.wrap} stroke={PAL.wrapDark} strokeWidth="1"/>
       <path d="M115,280 Q150,273 185,280" stroke={PAL.wrapDark} strokeWidth="0.8" fill="none"/>
       <path d="M118,290 Q150,288 182,290" stroke={PAL.wrapDark} strokeWidth="0.8" fill="none"/>
@@ -169,6 +175,7 @@ export default function App() {
   const [guessMessage, setGuessMessage] = useState("");
   const [guessRecord, setGuessRecord] = useState([]);
   const [guessIds, setGuessIds] = useState([]);
+  const [lastGuessId, setLastGuessId] = useState(null); // flower id of the most recent guess
   const [busy, setBusy] = useState(false);
   const [colorOrder, setColorOrder] = useState([0,1,2]);
   const fc = pos => FLOWERS[colorOrder[pos]];
@@ -210,7 +217,7 @@ export default function App() {
     if (!activeSurvey) return;
     setCurrentQ(0); setAnswers({}); setAnswered(activeSurvey.questions.map(()=>false));
     setBlooming(-1); setPhase("guess"); setGuessCorrect(null);
-    setGuessRecord([]); setGuessIds([]); setBusy(false);
+    setGuessRecord([]); setGuessIds([]); setLastGuessId(null); setBusy(false);
     setColorOrder([0,1,2]);
     setView("play");
   };
@@ -220,6 +227,7 @@ export default function App() {
     const guessedIdx = FLOWERS.findIndex(f => f.id === flowerId);
     const newGuessIds = [...guessIds, flowerId];
     setGuessIds(newGuessIds);
+    setLastGuessId(flowerId);
 
     if (currentQ === 0) {
       const remaining = [0,1,2,3].filter(i => i !== guessedIdx);
@@ -405,19 +413,43 @@ export default function App() {
             </div>
           )}
 
-          {phase === "reaction" && (
+          {phase === "reaction" && (() => {
+            const guessedFlower = FLOWERS.find(f => f.id === lastGuessId);
+            const actualFlower = fc(currentQ);
+            return (
             <div key={`r-${currentQ}`} style={{...S.cardArea, animation:"fadeUp 0.4s ease-out", textAlign:"center"}}>
+              <div style={S.reactionLabel}>Color guess result</div>
               <div style={{
                 ...S.reactionBubble,
                 background: guessCorrect?"#E8F5E4":"#FFF3E0",
                 borderColor: guessCorrect?"#A5D6A0":"#FFCC80",
               }}>
-                <div style={S.reactionVerdict}>{guessCorrect?"You guessed right":"Not quite"}</div>
+                {guessCorrect ? (
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8}}>
+                    <div style={{width:24,height:24,borderRadius:"50%",background:actualFlower.petal,boxShadow:"0 2px 6px rgba(0,0,0,0.12)"}}/>
+                    <div style={S.reactionVerdict}>You picked {actualFlower.label.toLowerCase()} and nailed it</div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:10}}>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{width:28,height:28,borderRadius:"50%",background:guessedFlower?.petal||"#ccc",margin:"0 auto 4px",opacity:0.5,boxShadow:"0 2px 6px rgba(0,0,0,0.08)"}}/>
+                        <div style={{fontSize:11,color:PAL.textLight}}>Your pick</div>
+                      </div>
+                      <div style={{fontSize:16,color:PAL.textLight}}>&#8594;</div>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{width:28,height:28,borderRadius:"50%",background:actualFlower.petal,margin:"0 auto 4px",boxShadow:"0 2px 6px rgba(0,0,0,0.12)"}}/>
+                        <div style={{fontSize:11,color:PAL.textMid,fontWeight:600}}>Bloomed</div>
+                      </div>
+                    </div>
+                    <div style={S.reactionVerdict}>It was {actualFlower.label.toLowerCase()}</div>
+                  </>
+                )}
                 <div style={S.reactionMsg}>{guessMessage}</div>
               </div>
-              <div style={S.reactionNote}>The {fc(currentQ).label.toLowerCase()} {fc(currentQ).id} blooms</div>
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -681,7 +713,8 @@ const S = {
   dot:{width:8,height:8,borderRadius:"50%",opacity:0.5},
 
   reactionBubble:{borderRadius:14,padding:"20px 24px",border:"1.5px solid",marginBottom:18},
-  reactionVerdict:{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:600,marginBottom:6},
+  reactionLabel:{fontSize:11,fontWeight:600,color:PAL.textLight,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12},
+  reactionVerdict:{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:600,marginBottom:6},
   reactionMsg:{fontSize:14,color:PAL.textMid,lineHeight:1.5},
   reactionNote:{fontSize:13,color:PAL.textLight,fontStyle:"italic"},
 

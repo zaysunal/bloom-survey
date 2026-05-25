@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./supabase";
 
 const PAL = {
   cream:"#F9F6F1", sand:"#F0EBE3", warm:"#E8E2DA",
@@ -31,7 +30,7 @@ const GUESS_WRONG = [
 ];
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
-const DEFAULT_SURVEY = {
+const DEFAULT_SURVEYS = [{
   id: "provocative-play-2026",
   title: "A Play That Asks Questions",
   subtitle: "Help us understand what families want from bold, boundary-pushing theater.",
@@ -40,60 +39,12 @@ const DEFAULT_SURVEY = {
     { id:"q2", text:"What matters most to you in a performance made for young audiences?", options:["Brave storytelling","Pure entertainment","Learning moments"] },
     { id:"q3", text:"How do you feel when art sparks unexpected conversations with kids?", options:["I welcome it","It depends on the topic","I prefer to avoid it"] },
   ],
-  is_active: true,
-};
+}];
 
 const ADMIN_PASS = "flowers";
 
-/* ─── Supabase helpers ─── */
-async function dbLoadSurveys() {
-  const { data, error } = await supabase.from("surveys").select("*").order("created_at", { ascending: true });
-  if (error) { console.error(error); return []; }
-  return data.map(s => ({ ...s, questions: s.questions || [] }));
-}
-
-async function dbLoadActiveSurvey() {
-  const { data } = await supabase.from("surveys").select("*").eq("is_active", true).limit(1).single();
-  return data;
-}
-
-async function dbLoadResponses() {
-  const { data, error } = await supabase.from("responses").select("*").order("completed_at", { ascending: true });
-  if (error) { console.error(error); return []; }
-  return data;
-}
-
-async function dbSaveResponse(entry) {
-  const { error } = await supabase.from("responses").insert(entry);
-  if (error) console.error(error);
-}
-
-async function dbCreateSurvey(survey) {
-  // deactivate all, then insert as active
-  await supabase.from("surveys").update({ is_active: false }).neq("id", "___");
-  const { error } = await supabase.from("surveys").insert({ ...survey, is_active: true, created_at: new Date().toISOString() });
-  if (error) console.error(error);
-}
-
-async function dbSetActive(id) {
-  await supabase.from("surveys").update({ is_active: false }).neq("id", "___");
-  await supabase.from("surveys").update({ is_active: true }).eq("id", id);
-}
-
-async function dbDeleteSurvey(id) {
-  await supabase.from("surveys").delete().eq("id", id);
-}
-
-async function dbClearResponses(surveyId) {
-  await supabase.from("responses").delete().eq("survey_id", surveyId);
-}
-
-async function dbSeedIfEmpty() {
-  const { count } = await supabase.from("surveys").select("*", { count: "exact", head: true });
-  if (count === 0) {
-    await supabase.from("surveys").insert({ ...DEFAULT_SURVEY, created_at: new Date().toISOString() });
-  }
-}
+async function load(k, fb) { try { const r = await window.storage.get(k); return r?.value ? JSON.parse(r.value) : fb; } catch { return fb; } }
+async function save(k, v) { try { await window.storage.set(k, JSON.stringify(v)); } catch(e) { console.error(e); } }
 
 /* ─── SVG ─── */
 function Petals({ cx, cy, count, rx, ry, dist, color, dark }) {
@@ -123,15 +74,19 @@ function BouquetSVG({ answered, blooming, colorOrder=[0,1,2] }) {
         <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
         <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={PAL.stem}/><stop offset="100%" stopColor="#4A6238"/></linearGradient>
       </defs>
+      {/* stems - always visible as grey scaffolding */}
       <path d="M82,150 Q95,200 108,285" stroke={answered[0]?"url(#sg)":PAL.greyLight} strokeWidth="4" fill="none" strokeLinecap="round" style={{transition:"stroke 1.2s"}}/>
       <path d="M150,120 Q150,180 150,285" stroke={answered[1]?"url(#sg)":PAL.greyLight} strokeWidth="4.5" fill="none" strokeLinecap="round" style={{transition:"stroke 1.2s"}}/>
       <path d="M218,150 Q205,200 192,285" stroke={answered[2]?"url(#sg)":PAL.greyLight} strokeWidth="4" fill="none" strokeLinecap="round" style={{transition:"stroke 1.2s"}}/>
+      {/* leaves */}
       <path d="M95,195 Q75,180 85,165 Q100,175 95,195Z" fill={answered[0]?PAL.leaf:PAL.greyLight} style={{transition:"fill 1.2s"}}/>
       <path d="M155,170 Q175,153 168,140 Q150,152 155,170Z" fill={answered[1]?PAL.leaf:PAL.greyLight} style={{transition:"fill 1.2s"}}/>
       <path d="M205,190 Q225,175 218,162 Q200,172 205,190Z" fill={answered[2]?PAL.leaf:PAL.greyLight} style={{transition:"fill 1.2s"}}/>
+      {/* wrap */}
       <path d="M100,270 Q110,260 150,257 Q190,260 200,270 L195,295 Q190,305 150,307 Q110,305 105,295Z" fill={PAL.wrap} stroke={PAL.wrapDark} strokeWidth="1"/>
       <path d="M115,280 Q150,273 185,280" stroke={PAL.wrapDark} strokeWidth="0.8" fill="none"/>
       <path d="M118,290 Q150,288 182,290" stroke={PAL.wrapDark} strokeWidth="0.8" fill="none"/>
+      {/* flowers */}
       <g style={fs(0)}><Petals cx={82} cy={115} count={7} rx={13} ry={22} dist={18} color={cf(0).petal} dark={cf(0).petalDark}/><Petals cx={82} cy={115} count={5} rx={9} ry={14} dist={10} color={cf(0).petalDark} dark={cf(0).petalDark}/><circle cx={82} cy={115} r={7} fill={cf(0).center}/></g>
       <g style={fs(1)}><Petals cx={150} cy={85} count={8} rx={16} ry={28} dist={22} color={cf(1).petal} dark={cf(1).petalDark}/><Petals cx={150} cy={85} count={6} rx={10} ry={17} dist={12} color={cf(1).petalDark} dark={cf(1).petalDark}/><circle cx={150} cy={85} r={8} fill={cf(1).center}/></g>
       <g style={fs(2)}><Petals cx={218} cy={115} count={10} rx={10} ry={20} dist={18} color={cf(2).petal} dark={cf(2).petalDark}/><Petals cx={218} cy={115} count={7} rx={7} ry={13} dist={10} color={cf(2).petalDark} dark={cf(2).petalDark}/><circle cx={218} cy={115} r={7} fill={cf(2).center}/></g>
@@ -159,10 +114,10 @@ function FallingPetal({ delay, x, color }) {
 }
 
 /* ═══════════ MAIN ═══════════ */
-export default function App() {
+export default function BloomSurvey() {
   const [view, setView] = useState("landing");
-  const [surveys, setSurveys] = useState([]);
-  const [activeSurvey, setActiveSurvey] = useState(null);
+  const [surveys, setSurveys] = useState(DEFAULT_SURVEYS);
+  const [activeId, setActiveId] = useState(DEFAULT_SURVEYS[0].id);
   const [responses, setResponses] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -175,7 +130,7 @@ export default function App() {
   const [guessMessage, setGuessMessage] = useState("");
   const [guessRecord, setGuessRecord] = useState([]);
   const [guessIds, setGuessIds] = useState([]);
-  const [lastGuessId, setLastGuessId] = useState(null); // flower id of the most recent guess
+  const [lastGuessId, setLastGuessId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [colorOrder, setColorOrder] = useState([0,1,2]);
   const fc = pos => FLOWERS[colorOrder[pos]];
@@ -191,28 +146,20 @@ export default function App() {
   const [newSub, setNewSub] = useState("");
   const [newQs, setNewQs] = useState([{text:"",options:["","",""]},{text:"",options:["","",""]},{text:"",options:["","",""]}]);
 
-  /* ── init ── */
+  const activeSurvey = surveys.find(s => s.id === activeId) || surveys[0];
+
   useEffect(() => { (async () => {
-    await dbSeedIfEmpty();
-    const s = await dbLoadSurveys();
-    setSurveys(s);
-    const active = await dbLoadActiveSurvey();
-    setActiveSurvey(active);
-    const r = await dbLoadResponses();
+    const s = await load("bloom-surveys", null);
+    if (s?.length) setSurveys(s); else await save("bloom-surveys", DEFAULT_SURVEYS);
+    const aid = await load("bloom-active-id", DEFAULT_SURVEYS[0].id);
+    setActiveId(aid);
+    const r = await load("bloom-responses", []);
     setResponses(r);
     setLoading(false);
   })(); }, []);
 
-  const refreshData = async () => {
-    const s = await dbLoadSurveys();
-    setSurveys(s);
-    const active = await dbLoadActiveSurvey();
-    setActiveSurvey(active);
-    const r = await dbLoadResponses();
-    setResponses(r);
-  };
+  const setActive = async id => { setActiveId(id); await save("bloom-active-id", id); };
 
-  /* ── game ── */
   const beginSurvey = () => {
     if (!activeSurvey) return;
     setCurrentQ(0); setAnswers({}); setAnswered(activeSurvey.questions.map(()=>false));
@@ -225,14 +172,12 @@ export default function App() {
   const handleGuess = (flowerId) => {
     if (busy) return;
     const guessedIdx = FLOWERS.findIndex(f => f.id === flowerId);
-    const newGuessIds = [...guessIds, flowerId];
-    setGuessIds(newGuessIds);
+    setGuessIds(prev => [...prev, flowerId]);
     setLastGuessId(flowerId);
 
     if (currentQ === 0) {
-      const remaining = [0,1,2,3].filter(i => i !== guessedIdx);
-      const shuffled = remaining.sort(() => Math.random() - 0.5);
-      setColorOrder([guessedIdx, shuffled[0], shuffled[1]]);
+      const remaining = [0,1,2,3].filter(i => i !== guessedIdx).sort(() => Math.random() - 0.5);
+      setColorOrder([guessedIdx, remaining[0], remaining[1]]);
       setGuessCorrect(true);
       setGuessMessage(pick(GUESS_RIGHT));
       setGuessRecord(prev => [...prev, true]);
@@ -254,30 +199,26 @@ export default function App() {
     setBlooming(currentQ);
     setPhase("reaction");
 
-    setTimeout(async () => {
+    setTimeout(() => {
       setBlooming(-1);
       if (currentQ < activeSurvey.questions.length - 1) {
         setCurrentQ(currentQ + 1);
         setPhase("guess"); setGuessCorrect(null); setBusy(false);
       } else {
         const entry = {
-          id: Date.now().toString(36),
-          survey_id: activeSurvey.id,
-          answers: na,
-          color_guesses: [...guessIds],
-          guess_results: [...guessRecord],
-          completed_at: new Date().toISOString(),
+          surveyId: activeSurvey.id, answers: na, completedAt: new Date().toISOString(),
+          id: Date.now().toString(36), colorGuesses: [...guessIds], guessResults: [...guessRecord],
         };
-        await dbSaveResponse(entry);
-        setResponses(prev => [...prev, entry]);
+        const updated = [...responses, entry];
+        setResponses(updated);
+        save("bloom-responses", updated);
         setView("complete"); setBusy(false);
       }
     }, 2200);
   };
 
-  /* ── admin ── */
   const tryLogin = () => {
-    if (passInput === ADMIN_PASS) { setAdminAuth(true); setPassError(false); setAdminView("dash"); setView("admin"); refreshData(); }
+    if (passInput === ADMIN_PASS) { setAdminAuth(true); setPassError(false); setAdminView("dash"); setView("admin"); }
     else setPassError(true);
   };
 
@@ -287,17 +228,20 @@ export default function App() {
     }));
     if (!newTitle.trim() || qs.length < 1 || qs.some(q => q.options.length < 2)) return;
     const s = { id: Date.now().toString(36), title: newTitle.trim(), subtitle: newSub.trim(), questions: qs };
-    await dbCreateSurvey(s);
-    await refreshData();
+    const updated = [...surveys, s];
+    setSurveys(updated); await save("bloom-surveys", updated);
+    await setActive(s.id);
     setNewTitle(""); setNewSub(""); setNewQs([{text:"",options:["","",""]},{text:"",options:["","",""]},{text:"",options:["","",""]}]);
     setAdminView("dash");
   };
 
-  const handleSetActive = async (id) => { await dbSetActive(id); await refreshData(); };
+  const deleteSurvey = async id => {
+    const updated = surveys.filter(s => s.id !== id);
+    setSurveys(updated); await save("bloom-surveys", updated);
+    if (activeId === id && updated.length) await setActive(updated[0].id);
+  };
 
-  const deleteSurvey = async (id) => { await dbDeleteSurvey(id); await refreshData(); };
-
-  const respondentsOf = sid => responses.filter(r => r.survey_id === sid);
+  const respondentsOf = sid => responses.filter(r => r.surveyId === sid);
 
   const getStats = (sid, filter) => {
     let rs = respondentsOf(sid);
@@ -305,18 +249,15 @@ export default function App() {
     if (!survey || !rs.length) return null;
     if (filter) rs = rs.filter(r => r.answers[filter.qId] === filter.answer);
     const stats = {};
-    survey.questions.forEach(q => {
-      stats[q.id] = {};
-      q.options.forEach(o => { stats[q.id][o] = rs.filter(r => r.answers[q.id] === o).length; });
-    });
+    survey.questions.forEach(q => { stats[q.id] = {}; q.options.forEach(o => { stats[q.id][o] = rs.filter(r => r.answers[q.id] === o).length; }); });
     return { stats, total: rs.length };
   };
 
   const getColorStats = (sid, filter) => {
     let rs = respondentsOf(sid);
     if (filter) rs = rs.filter(r => r.answers[filter.qId] === filter.answer);
-    let correct = 0; let total = 0;
-    rs.forEach(r => { if (r.guess_results) { r.guess_results.forEach(g => { total++; if (g) correct++; }); } });
+    let correct = 0, total = 0;
+    rs.forEach(r => { if (r.guessResults) r.guessResults.forEach(g => { total++; if (g) correct++; }); });
     return { correct, total, responses: rs.length };
   };
 
@@ -326,7 +267,7 @@ export default function App() {
     <div style={S.shell}>
       <style>{CSS}</style>
 
-      {/* ── LANDING ── */}
+      {/* LANDING */}
       {view === "landing" && (
         <div style={S.landWrap}>
           <MiniFlower x={6} y={10} size={46} color={FLOWERS[0].petal} delay={0} dur={5}/>
@@ -342,31 +283,24 @@ export default function App() {
           <MiniLeaf x={92} y={20} size={16} delay={2.2}/>
           <MiniLeaf x={3} y={48} size={20} delay={0.7} flip/>
           <MiniLeaf x={48} y={90} size={15} delay={1.6}/>
-
           <div style={S.landContent}>
             <div style={S.badge}>bloom</div>
             {activeSurvey && <div style={S.surveyPill}>{activeSurvey.title}</div>}
             <h1 style={S.landTitle}>Every answer grows a flower</h1>
-            <p style={S.landBody}>
-              {activeSurvey?.subtitle || "Three questions. Three blooms. One bouquet waiting to come alive."}
-            </p>
-            <p style={S.landBodySm}>
-              Guess which color appears next. Answer from the heart. Watch your bouquet come to life.
-            </p>
+            <p style={S.landBody}>{activeSurvey?.subtitle || "Three questions. Three blooms. One bouquet waiting to come alive."}</p>
+            <p style={S.landBodySm}>Guess which color appears next. Answer from the heart. Watch your bouquet come to life.</p>
             {activeSurvey ? (
               <button style={S.landBtn} onClick={beginSurvey}>Begin</button>
             ) : (
               <p style={S.landHint}>No active survey right now. Check back soon.</p>
             )}
-            <p style={S.landHint}>
-              {activeSurvey ? `${activeSurvey.questions.length} questions. About a minute.` : ""}
-            </p>
+            <p style={S.landHint}>{activeSurvey ? `${activeSurvey.questions.length} questions. About a minute.` : ""}</p>
           </div>
           <button style={S.hostLink} onClick={() => setView("admin-gate")}>Host login</button>
         </div>
       )}
 
-      {/* ── PLAY ── */}
+      {/* PLAY */}
       {view === "play" && activeSurvey && (
         <div style={S.playWrap}>
           <button style={S.backBtn} onClick={() => setView("landing")}>&#8592; Back</button>
@@ -453,7 +387,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── COMPLETE ── */}
+      {/* COMPLETE */}
       {view === "complete" && (
         <div style={S.completeWrap}>
           <div style={S.petalBox}>
@@ -477,7 +411,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── ADMIN GATE ── */}
+      {/* ADMIN GATE */}
       {view === "admin-gate" && !adminAuth && (
         <div style={S.pageWrap}>
           <button style={S.backBtn} onClick={() => setView("landing")}>&#8592; Back</button>
@@ -495,29 +429,28 @@ export default function App() {
         </div>
       )}
 
-      {/* ── ADMIN DASH ── */}
+      {/* ADMIN DASH */}
       {view === "admin" && adminAuth && adminView === "dash" && (
         <div style={S.pageWrap}>
           <button style={S.backBtn} onClick={() => {setView("landing");setAdminAuth(false);setPassInput("");}}>&#8592; Log out</button>
           <h1 style={S.pageTitle}>Host Dashboard</h1>
           <p style={S.pageSub}>Create surveys, set the active one, track responses.</p>
-          <button style={{...S.primaryBtn,marginTop:24,marginBottom:28,width:"100%"}} onClick={() => setAdminView("create")}>
-            Create a new survey
-          </button>
+          <button style={{...S.primaryBtn,marginTop:24,marginBottom:28,width:"100%"}} onClick={() => setAdminView("create")}>Create a new survey</button>
           <div style={S.secLabel}>Your Surveys</div>
           {surveys.map(s => {
             const n = respondentsOf(s.id).length;
+            const isActive = s.id === activeId;
             return (
-              <div key={s.id} style={{...S.adminCard, borderColor:s.is_active?FLOWERS[1].petal+"70":PAL.warm}}>
+              <div key={s.id} style={{...S.adminCard, borderColor:isActive?FLOWERS[1].petal+"70":PAL.warm}}>
                 <div style={{flex:1}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
                     <span style={S.cardTitle}>{s.title}</span>
-                    {s.is_active && <span style={S.liveBadge}>LIVE</span>}
+                    {isActive && <span style={S.liveBadge}>LIVE</span>}
                   </div>
                   <div style={S.cardMeta}>{s.questions.length} questions / {n} responses</div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end"}}>
-                  {!s.is_active && <button style={S.smallBtn} onClick={() => handleSetActive(s.id)}>Set live</button>}
+                  {!isActive && <button style={S.smallBtn} onClick={() => setActive(s.id)}>Set live</button>}
                   {n > 0 && <button style={S.smallBtn} onClick={() => {setResultsSurveyId(s.id);setResultFilter(null);setAdminView("results");}}>Results</button>}
                   <button style={S.smallDanger} onClick={() => deleteSurvey(s.id)}>Delete</button>
                 </div>
@@ -527,7 +460,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── ADMIN CREATE ── */}
+      {/* ADMIN CREATE */}
       {view === "admin" && adminAuth && adminView === "create" && (
         <div style={S.pageWrap}>
           <button style={S.backBtn} onClick={() => setAdminView("dash")}>&#8592; Dashboard</button>
@@ -555,7 +488,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── ADMIN RESULTS ── */}
+      {/* ADMIN RESULTS */}
       {view === "admin" && adminAuth && adminView === "results" && (() => {
         const survey = surveys.find(s => s.id === resultsSurveyId);
         if (!survey) return null;
@@ -571,84 +504,54 @@ export default function App() {
         const { stats, total: filteredCount } = result;
         const colorStats = getColorStats(resultsSurveyId, resultFilter);
         const isFiltered = resultFilter !== null;
-
         return (
           <div style={S.pageWrap}>
             <button style={S.backBtn} onClick={() => setAdminView("dash")}>&#8592; Dashboard</button>
             <h1 style={S.pageTitle}>{survey.title}</h1>
             <div style={{...S.cardMeta, marginBottom:6}}>{totalCount} total responses</div>
-
             {isFiltered && (
               <div style={S.filterChip}>
-                <span style={S.filterChipText}>
-                  Showing {filteredCount} of {totalCount} who answered "{resultFilter.answer}"
-                </span>
+                <span style={S.filterChipText}>Showing {filteredCount} of {totalCount} who answered "{resultFilter.answer}"</span>
                 <button style={S.filterClear} onClick={() => setResultFilter(null)}>Clear filter</button>
               </div>
             )}
-
             <div style={{...S.resultCard, marginTop:16, marginBottom:6}}>
               <div style={S.rqLabel}>Color Guessing</div>
               <div style={{fontSize:14,color:PAL.textMid,lineHeight:1.5}}>
-                {colorStats.responses > 0 ? (
-                  <>
-                    Across {colorStats.responses} respondent{colorStats.responses!==1?"s":""}, {colorStats.correct} of {colorStats.total} color guesses were correct ({colorStats.total > 0 ? Math.round((colorStats.correct/colorStats.total)*100) : 0}%).
-                    First guess is always correct by design.
-                  </>
-                ) : "No color data recorded yet."}
+                {colorStats.responses > 0 ? (<>Across {colorStats.responses} respondent{colorStats.responses!==1?"s":""}, {colorStats.correct} of {colorStats.total} color guesses were correct ({colorStats.total>0?Math.round((colorStats.correct/colorStats.total)*100):0}%). First guess is always correct by design.</>) : "No color data recorded yet."}
               </div>
             </div>
-
             {survey.questions.map((q, qi) => {
               const isFilterSource = resultFilter?.qId === q.id;
               return (
-                <div key={q.id} style={{...S.resultCard, borderColor: isFilterSource ? FLOWERS[qi%4].petal+"60" : PAL.warm}}>
+                <div key={q.id} style={{...S.resultCard, borderColor:isFilterSource?FLOWERS[qi%4].petal+"60":PAL.warm}}>
                   <div style={S.rqLabel}>Q{qi+1}</div>
                   <div style={S.rqText}>{q.text}</div>
-                  {isFilterSource && (
-                    <div style={{fontSize:11,color:FLOWERS[qi%4].petal,fontWeight:600,marginTop:4,marginBottom:4}}>
-                      Filtering by this question
-                    </div>
-                  )}
+                  {isFilterSource && <div style={{fontSize:11,color:FLOWERS[qi%4].petal,fontWeight:600,marginTop:4,marginBottom:4}}>Filtering by this question</div>}
                   <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:12}}>
                     {q.options.map(opt => {
-                      const val = stats?.[q.id]?.[opt] || 0;
-                      const pct = filteredCount ? Math.round((val/filteredCount)*100) : 0;
-                      const isActiveFilter = resultFilter?.qId === q.id && resultFilter?.answer === opt;
-                      const barColor = FLOWERS[qi % 4].petal;
+                      const val = stats?.[q.id]?.[opt]||0;
+                      const pct = filteredCount?Math.round((val/filteredCount)*100):0;
+                      const isActiveFilter = resultFilter?.qId===q.id && resultFilter?.answer===opt;
+                      const barColor = FLOWERS[qi%4].petal;
                       return (
-                        <div key={opt}
-                          style={{...S.barRow, cursor: isActiveFilter?"default":"pointer", opacity: isFilterSource && !isActiveFilter ? 0.4 : 1}}
-                          onClick={() => {
-                            if (isActiveFilter) setResultFilter(null);
-                            else setResultFilter({ qId: q.id, answer: opt });
-                          }}>
+                        <div key={opt} style={{...S.barRow, cursor:isActiveFilter?"default":"pointer", opacity:isFilterSource&&!isActiveFilter?0.4:1}}
+                          onClick={() => { if(isActiveFilter) setResultFilter(null); else setResultFilter({qId:q.id, answer:opt}); }}>
                           <div style={S.barLabel}>{opt}</div>
-                          <div style={S.barTrack}>
-                            <div style={{
-                              ...S.barFill, width:`${pct}%`, background: isActiveFilter ? barColor : barColor+"BB",
-                              boxShadow: isActiveFilter ? `0 0 8px ${barColor}50` : "none",
-                            }}/>
-                          </div>
+                          <div style={S.barTrack}><div style={{...S.barFill, width:`${pct}%`, background:isActiveFilter?barColor:barColor+"BB", boxShadow:isActiveFilter?`0 0 8px ${barColor}50`:"none"}}/></div>
                           <div style={{...S.barVal, fontWeight:isActiveFilter?700:400}}>{val} ({pct}%)</div>
                         </div>
                       );
                     })}
                   </div>
-                  {!isFilterSource && !isFiltered && (
-                    <div style={{fontSize:11,color:PAL.textLight,marginTop:8,fontStyle:"italic"}}>
-                      Tap a bar to filter other questions by that answer
-                    </div>
-                  )}
+                  {!isFilterSource && !isFiltered && <div style={{fontSize:11,color:PAL.textLight,marginTop:8,fontStyle:"italic"}}>Tap a bar to filter other questions by that answer</div>}
                 </div>
               );
             })}
-
             <button style={{...S.dangerLink,marginTop:16}} onClick={async () => {
-              if (confirm("Clear all responses for this survey?")) {
-                await dbClearResponses(resultsSurveyId);
-                await refreshData();
-                setResultFilter(null);
+              if(confirm("Clear all responses for this survey?")) {
+                const updated = responses.filter(r=>r.surveyId!==resultsSurveyId);
+                setResponses(updated); await save("bloom-responses",updated); setResultFilter(null);
               }
             }}>Clear responses for this survey</button>
           </div>
@@ -676,7 +579,6 @@ const S = {
   shell:{fontFamily:"'DM Sans',sans-serif",minHeight:"100vh",background:`linear-gradient(180deg,${PAL.cream} 0%,${PAL.sand} 100%)`,color:PAL.text,position:"relative",overflow:"hidden"},
   loadWrap:{display:"flex",justifyContent:"center",alignItems:"center",minHeight:"100vh",background:PAL.cream},
   loadDot:{width:12,height:12,borderRadius:"50%",background:PAL.textLight,animation:"gentlePulse 1.5s ease-in-out infinite"},
-
   landWrap:{minHeight:"100vh",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",padding:"40px 28px",position:"relative",overflow:"hidden",textAlign:"center"},
   landContent:{position:"relative",zIndex:2,maxWidth:380},
   badge:{fontFamily:"'Playfair Display',serif",fontSize:13,fontWeight:600,letterSpacing:5,textTransform:"uppercase",color:PAL.textLight,marginBottom:24},
@@ -687,49 +589,41 @@ const S = {
   landBtn:{fontSize:16,fontWeight:600,color:PAL.white,background:FLOWERS[1].petal,borderRadius:12,padding:"16px 56px",fontFamily:"'DM Sans',sans-serif",boxShadow:"0 4px 20px rgba(155,114,170,0.25)"},
   landHint:{fontSize:12,color:PAL.textLight,marginTop:18},
   hostLink:{position:"absolute",bottom:24,right:24,fontSize:12,color:PAL.textLight,textDecoration:"underline",textUnderlineOffset:3,zIndex:3,fontFamily:"'DM Sans',sans-serif"},
-
   pageWrap:{minHeight:"100vh",padding:"16px 24px 60px",maxWidth:480,margin:"0 auto",width:"100%"},
   backBtn:{fontSize:14,color:PAL.textMid,fontWeight:500,marginBottom:16,padding:"8px 0",fontFamily:"'DM Sans',sans-serif"},
   pageTitle:{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:400,lineHeight:1.2,marginBottom:6},
   pageSub:{fontSize:14,lineHeight:1.6,color:PAL.textLight},
   noData:{fontSize:14,color:"#B5AFA7",fontStyle:"italic",marginTop:20},
-
   playWrap:{minHeight:"100vh",display:"flex",flexDirection:"column",padding:"14px 22px 36px",maxWidth:480,margin:"0 auto",width:"100%"},
   bouquetArea:{display:"flex",flexDirection:"column",alignItems:"center",padding:"4px 0 8px"},
   bloomCount:{fontSize:11,color:PAL.textLight,fontWeight:500,letterSpacing:1,textTransform:"uppercase",marginTop:2},
   cardArea:{flex:1,display:"flex",flexDirection:"column",paddingTop:4},
   phaseLabel:{fontSize:11,fontWeight:600,color:PAL.textLight,letterSpacing:1.5,textTransform:"uppercase",textAlign:"center",marginBottom:10},
-
   guessTitle:{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:400,textAlign:"center",marginBottom:24,color:PAL.text},
   swatchGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,justifyItems:"center",maxWidth:280,margin:"0 auto"},
   swatchBtn:{display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:10,borderRadius:12,border:"2px solid transparent",transition:"opacity 0.3s"},
   swatch:{width:50,height:50,borderRadius:"50%",boxShadow:"0 2px 8px rgba(0,0,0,0.1)"},
   swatchLabel:{fontSize:12,fontWeight:500,color:PAL.textMid},
-
   qText:{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:400,lineHeight:1.4,textAlign:"center",color:PAL.text,marginBottom:24,padding:"0 4px"},
   optCol:{display:"flex",flexDirection:"column",gap:12},
   optBtn:{display:"flex",alignItems:"center",justifyContent:"space-between",background:PAL.white,borderRadius:12,padding:"16px 18px",border:"1.5px solid",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"border-color 0.3s"},
   optText:{fontSize:15,fontWeight:500,color:"#3D3833"},
   dot:{width:8,height:8,borderRadius:"50%",opacity:0.5},
-
   reactionBubble:{borderRadius:14,padding:"20px 24px",border:"1.5px solid",marginBottom:18},
   reactionLabel:{fontSize:11,fontWeight:600,color:PAL.textLight,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12},
   reactionVerdict:{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:600,marginBottom:6},
   reactionMsg:{fontSize:14,color:PAL.textMid,lineHeight:1.5},
   reactionNote:{fontSize:13,color:PAL.textLight,fontStyle:"italic"},
-
   completeWrap:{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 28px",textAlign:"center",position:"relative"},
   petalBox:{position:"fixed",top:0,left:0,right:0,bottom:0,pointerEvents:"none",overflow:"hidden",zIndex:0},
   completeTitle:{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:400,marginBottom:10,position:"relative",zIndex:1},
   completeGuess:{fontSize:14,color:FLOWERS[1].petal,fontWeight:500,marginBottom:12,position:"relative",zIndex:1},
   completeBody:{fontSize:14,lineHeight:1.7,color:PAL.textMid,maxWidth:320,marginBottom:30,position:"relative",zIndex:1},
   primaryBtn:{fontSize:15,fontWeight:600,color:PAL.white,background:FLOWERS[1].petal,borderRadius:11,padding:"15px 36px",fontFamily:"'DM Sans',sans-serif",boxShadow:"0 3px 14px rgba(155,114,170,0.2)",border:"none",cursor:"pointer",position:"relative",zIndex:1},
-
   input:{width:"100%",fontSize:15,padding:"13px 16px",borderRadius:10,border:`1.5px solid ${PAL.warm}`,background:PAL.white,color:PAL.text},
   errorText:{fontSize:13,color:PAL.danger,marginTop:8},
   label:{fontSize:12,fontWeight:600,color:PAL.textMid,marginBottom:6,marginTop:18,display:"block",letterSpacing:0.5},
   qBlock:{marginTop:20,padding:"16px 18px",background:PAL.white,borderRadius:12,border:`1px solid ${PAL.warm}`},
-
   secLabel:{fontSize:12,fontWeight:600,letterSpacing:1.5,textTransform:"uppercase",color:PAL.textLight,marginBottom:14},
   adminCard:{display:"flex",alignItems:"flex-start",background:PAL.white,borderRadius:12,padding:"16px 18px",border:"1.5px solid",marginBottom:10,borderColor:PAL.warm},
   cardTitle:{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:600},
@@ -737,7 +631,6 @@ const S = {
   liveBadge:{fontSize:10,fontWeight:700,letterSpacing:1.5,color:FLOWERS[1].petal,background:FLOWERS[1].petal+"18",borderRadius:6,padding:"2px 8px"},
   smallBtn:{fontSize:12,fontWeight:600,color:FLOWERS[1].petal,background:FLOWERS[1].petal+"14",borderRadius:8,padding:"6px 14px",border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"},
   smallDanger:{fontSize:12,fontWeight:500,color:PAL.danger,textDecoration:"underline",textUnderlineOffset:2,fontFamily:"'DM Sans',sans-serif"},
-
   resultCard:{background:PAL.white,borderRadius:12,padding:"18px 20px",border:`1px solid ${PAL.warm}`,marginBottom:14},
   rqLabel:{fontSize:11,fontWeight:600,color:PAL.textLight,letterSpacing:1,textTransform:"uppercase",marginBottom:5},
   rqText:{fontSize:14,fontWeight:500,color:"#3D3833",lineHeight:1.5},
@@ -746,10 +639,8 @@ const S = {
   barTrack:{flex:1,height:10,background:"#EEEAE4",borderRadius:5,overflow:"hidden"},
   barFill:{height:"100%",borderRadius:5,transition:"width 0.6s ease, box-shadow 0.3s",minWidth:2},
   barVal:{fontSize:11,color:PAL.textLight,width:64,flexShrink:0},
-
   filterChip:{display:"flex",alignItems:"center",gap:10,background:FLOWERS[1].petal+"12",border:`1px solid ${FLOWERS[1].petal}30`,borderRadius:10,padding:"10px 14px",marginTop:12,marginBottom:6,flexWrap:"wrap"},
   filterChipText:{fontSize:13,color:PAL.text,flex:1,minWidth:180},
   filterClear:{fontSize:12,fontWeight:600,color:FLOWERS[1].petal,background:PAL.white,border:`1px solid ${FLOWERS[1].petal}40`,borderRadius:8,padding:"5px 12px",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap"},
-
   dangerLink:{fontSize:13,color:PAL.danger,fontWeight:500,textDecoration:"underline",textUnderlineOffset:3,fontFamily:"'DM Sans',sans-serif"},
 };
