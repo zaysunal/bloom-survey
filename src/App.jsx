@@ -64,6 +64,7 @@ export default function App(){
   const[activeSurvey,setActiveSurvey]=useState(null);
   const[responses,setResponses]=useState([]);
   const[loading,setLoading]=useState(true);
+  const[loadError,setLoadError]=useState(null);
   const[currentQ,setCurrentQ]=useState(0);
   const[answers,setAnswers]=useState({});
   const[bloomed,setBloomed]=useState([false,false,false]);
@@ -88,7 +89,7 @@ export default function App(){
   const[newSub,setNewSub]=useState("");
   const[newQs,setNewQs]=useState([{text:"",type:"choice",options:["","",""]},{text:"",type:"choice",options:["","",""]},{text:"",type:"choice",options:["","",""]}]);
 
-  useEffect(()=>{(async()=>{await dbSeedIfEmpty();const s=await dbLoadSurveys();setSurveys(s);const a=await dbLoadActiveSurvey();setActiveSurvey(a);const r=await dbLoadResponses();setResponses(r);setLoading(false);})();},[]);
+  useEffect(()=>{(async()=>{try{await dbSeedIfEmpty();const s=await dbLoadSurveys();setSurveys(s);const a=await dbLoadActiveSurvey();setActiveSurvey(a);const r=await dbLoadResponses();setResponses(r);}catch(e){console.error(e);setLoadError(e.message||"Failed to load survey data.");}finally{setLoading(false);}})();},[]);
   const refreshData=async()=>{const s=await dbLoadSurveys();setSurveys(s);const a=await dbLoadActiveSurvey();setActiveSurvey(a);const r=await dbLoadResponses();setResponses(r);};
 
   const beginSurvey=()=>{if(!activeSurvey)return;const N=activeSurvey.questions.length;setCurrentQ(0);setAnswers({});setBloomed([false,false,false]);setBloomingIdx(-1);setGuessCorrect(null);setGuessRecord([]);setGuessIds([]);setLastGuessId(null);setBusy(false);setColorOrder([0,1,2]);setTextInput("");setPhase(isFirstOfGroup(0,N)?"guess":"question");setView("play");};
@@ -106,6 +107,7 @@ export default function App(){
   const getColorStats=(sid,filter)=>{let rs=respondentsOf(sid);if(filter)rs=rs.filter(r=>r.answers[filter.qId]===filter.answer);let correct=0,total=0;rs.forEach(r=>{if(r.guess_results)r.guess_results.forEach(g=>{total++;if(g)correct++;});});return{correct,total,responses:rs.length};};
 
   if(loading)return<div style={S.loadWrap}><div style={S.loadDot}/></div>;
+  if(loadError)return<div style={S.loadWrap}><div style={{textAlign:"center",padding:24,maxWidth:340}}><div style={{fontSize:14,fontWeight:600,color:PAL.danger,marginBottom:8}}>Couldn't connect</div><div style={{fontSize:13,color:PAL.textMid,lineHeight:1.5}}>{loadError}</div></div></div>;
   const totalQ=activeSurvey?.questions.length||0;
   const currentFlower=totalQ>0?flowerOfQ(currentQ,totalQ):0;
 
